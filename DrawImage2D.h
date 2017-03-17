@@ -24,4 +24,4 @@
 
 TH2D* DrawImages(larcv::Image2D img, std::string histName);
 
-larcv::Image2D MaskImage2D(larcv::Image2D img_orig,larcv::Image2D img_bdch);
+larcv::Image2D MaskImage2D(larcv::Image2D img_orig,larcv::Image2D img_bdch, larcv::Image2D img_true);

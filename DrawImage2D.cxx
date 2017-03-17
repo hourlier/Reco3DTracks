@@ -16,19 +16,27 @@ TH2D* DrawImages(larcv::Image2D img, std::string histName){
     return himg;
 }
 
-larcv::Image2D MaskImage2D(larcv::Image2D img_orig,larcv::Image2D img_bdch){
-    larcv::Image2D img_mased(img_orig.meta());
-    for(int row = 0;row<img_mased.meta().rows();row++){
-        //std::cout << row << std::endl;
-        for(int col = 0;col<img_mased.meta().cols();col++){
-            //std::cout << col << std::endl;
-            if(img_bdch.pixel(row, col) == 0/* && img_orig.pixel(row,col) !=0*/){
-                img_mased.set_pixel(row,col,img_orig.pixel(row,col));
+larcv::Image2D MaskImage2D(larcv::Image2D img_orig,larcv::Image2D img_bdch, larcv::Image2D img_true){
+    //std::cout << "entering MaskImage2D" << std::endl;
+    larcv::Image2D img_masked(img_bdch.meta());
+    img_masked.paint(0);
+    //std::cout << "img_masked => " << img_masked.meta().dump() << std::endl;
+    //std::cout << "img_orig   => " << img_orig.meta().dump() << std::endl;
+    //std::cout << "img_bdch   => " << img_bdch.meta().dump() << std::endl;
+
+    //std::cout << img_masked.meta().rows() << "rows and " << img_masked.meta().cols() << " cols" << std::endl;
+    //std::cout << "img_masked declared" << std::endl;
+    for(int row = 0;row<img_masked.meta().rows();row++){
+        for(int col = 0;col<img_masked.meta().cols();col++){
+            //std::cout << "MaskImage2D: " << row << "," << col << std::endl;
+            if(img_bdch.pixel(row, col) == 0 && img_orig.pixel(row,col) !=0){
+                //std::cout << "MaskImage2D: setting pixel " <<row<<","<<col << " with value " << img_orig.pixel(row,col)<< std::endl;
+                img_masked.set_pixel(row,col,img_orig.pixel(row,col));
             }
             else{
-                img_mased.set_pixel(row,col,0);
+                img_masked.set_pixel(row,col,0);
             }
         }
     }
-    return img_mased;
+    return img_masked;
 }

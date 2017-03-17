@@ -51,6 +51,7 @@ include $(LARLITECV_BASEDIR)/Makefile/GNUmakefile.CORE
 pkg_build:
 	@rm -rf $(PROGRAMS)
 	@cp $(PROGRAMS).cxx $(PROGRAMS).cxx~
+	@rm -rf tmp.txt
 pkg_clean:
 
 # Add your program below with a space after the previous one.
