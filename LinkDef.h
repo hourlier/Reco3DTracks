@@ -11,6 +11,6 @@
 
 #pragma link C++ namespace larlitecv;
 #pragma link C++ std::vector<std::vector<larcv::EventImage2D> >+;
-//#pragma link C++ namespace larlitecv::Reco3D;
+#pragma link C++ namespace Reco3D+;
 //ADD_NEW_CLASS ... do not change this line
 #endif

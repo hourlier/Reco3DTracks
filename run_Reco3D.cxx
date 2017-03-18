@@ -24,6 +24,7 @@
 #include "GapChs/GapChProcessor.h"
 #include "GapChs/EmptyChannelAlgo.h"
 #include "ThruMu/AStar3DAlgo.h"
+#include "Reco3D.h"
 
 // ROOT includes
 #include "TFile.h"
@@ -34,10 +35,14 @@
 
 // my includes
 #include "DrawImage2D.h"
+#include "Reco3D.h"
 
 int main( int nargs, char** argv ) {
     std::string codename = "\t \033[97m[run_3DTrackReco]\033[00m   ";
     std::cout << codename << std::endl;
+    Reco3D *myReco = new Reco3D();
+    myReco->SayHi();
+
     std::cout << codename <<"Set larlitecv" << std::endl;
 
     larlitecv::DataCoordinator dataco;
@@ -243,7 +248,7 @@ int main( int nargs, char** argv ) {
                 std::cout << "starting A*" << std::endl;
                 larlitecv::AStar3DAlgoConfig config;
                 config.accept_badch_nodes = true;
-                config.astar_threshold.resize(3,0.01);
+                config.astar_threshold.resize(3,0.001);
                 //config.astar_threshold[2] = 10.0;
                 config.astar_neighborhood.resize(3,10); //can jump over n empty pixels
                 config.astar_start_padding = 5;// allowed region around the start point
@@ -273,15 +278,6 @@ int main( int nargs, char** argv ) {
                 //_______________________________________________
                 // run A*
                 //-----------------------------------------------
-                std::cout << std::endl;
-                //std::cout <<  "MaskedImg_v.front().meta().dump() : " << MaskedImg_v.front().meta().dump() << std::endl;
-                //std::cout << "start_row  : " << start_row << " meta pos_y : " << MaskedImg_v.front().meta().pos_y(start_row) << std::endl;
-                //std::cout << "start_cols : " << start_cols[0] << "\t" << start_cols[1] << "\t" << start_cols[2] << std::endl;
-                //std::cout << "meta pos   : " << MaskedImg_v.at(0).meta().pos_x(start_cols[0]) << "\t" << MaskedImg_v.at(1).meta().pos_x(start_cols[1]) << "\t" << MaskedImg_v.at(2).meta().pos_x(start_cols[2]) << std::endl;
-                //std::cout << std::endl;
-                //std::cout << "end_row    : " << end_row << std::endl;
-                //std::cout << "end_cols   : " << end_cols[0] << "\t" << end_cols[1] << "\t" << end_cols[2] << std::endl;
-                std::cout << std::endl;
 
                 std::vector<larlitecv::AStar3DNode> path = algo.findpath( MaskedImg_v, track_badchs_v, tagged_img_v, start_row, end_row, start_cols, end_cols, goal_reached );
                 std::cout << "pathsize=" << path.size() << std::endl;
@@ -299,20 +295,20 @@ int main( int nargs, char** argv ) {
                 }
                 int nNodes[3] = {0,0,0};
                 for(int iNode = 0;iNode<path.size();iNode++){
-                    std::cout << iNode << "\trow : " << path.at(iNode).row << "\t";
+                    //std::cout << iNode << "\trow : " << path.at(iNode).row << "\t";
                     if(write3DPoint)myFlux << Run << " " << SubRun << " " << Event << " " << iVertex << " " << iTrack << " " << iNode << " " << path.at(iNode).u << " " << path.at(iNode).v << " " << path.at(iNode).w << std::endl;
                     for(int iPlane=0;iPlane<3;iPlane++){
                         gReco[iPlane]->SetPoint(nNodes[iPlane],path.at(iNode).cols[iPlane],path.at(iNode).row);
-                        std::cout << "\tcol " << iPlane << " : " << path.at(iNode).cols[iPlane] << "\t";
+                        //std::cout << "\tcol " << iPlane << " : " << path.at(iNode).cols[iPlane] << "\t";
                         nNodes[iPlane]++;
                     }
-                    std::cout << std::endl;
+                    //std::cout << std::endl;
                 }
                 std::cout << std::endl;
-                std::cout << "end_row    : " << end_row << std::endl;
-                std::cout << "end_cols   : " << end_cols[0] << "\t" << end_cols[1] << "\t" << end_cols[2] << std::endl;
-                std::cout << "Goal Reached? : " << goal_reached << std::endl;
-                std::cout << std::endl;
+                //std::cout << "end_row    : " << end_row << std::endl;
+                //std::cout << "end_cols   : " << end_cols[0] << "\t" << end_cols[1] << "\t" << end_cols[2] << std::endl;
+                //std::cout << "Goal Reached? : " << goal_reached << std::endl;
+                //std::cout << std::endl;
                 if(DrawPictures){
                     for(int iPlane = 0;iPlane<3;iPlane++){
                         histName = Form("hMasked_%d%d%d%d%d%d",Run,SubRun,Event,iVertex,iTrack,iPlane);
@@ -327,7 +323,7 @@ int main( int nargs, char** argv ) {
                         hBadChannels[iPlane]->SetMarkerColor(kGray);
                         hFullVertex[iPlane]->Rebin2D();
                         hFullVertex[iPlane]->Draw("colz");
-                        hBadChannels[iPlane]->Draw("same colz");
+                        hBadChannels[iPlane]->Draw("same");
                         hMasked[iPlane]->SetMarkerStyle(1);
                         hMasked[iPlane]->SetMarkerSize(0.5);
                         hMasked[iPlane]->Draw("same colz");
@@ -346,9 +342,7 @@ int main( int nargs, char** argv ) {
                     }
                     cViews->Modified();
                     cViews->Update();
-                    //std::cout << "does it block here?" << std::endl;
                     cViews->SaveAs(Form("views_%d_%d_%d_%d_%d.png",Run, SubRun,Event,iVertex,iTrack));
-                    //std::cout << "image saved" << std::endl;
                 }
 
                 std::cout << std::endl;
