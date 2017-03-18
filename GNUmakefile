@@ -3,7 +3,7 @@
 PACKAGE_NAME = Reco3DTracks
 
 # ADD BINDARY NAMES HERE
-PROGRAMS = run_Reco3D
+PROGRAMS = run_Reco3D_larlite
 
 PROGRAM_SOURCE = $(addsuffix .cxx, $(PROGRAMS))
 SOURCES = $(filter-out $(PROGRAM_SOURCE), $(wildcard *.cxx))
