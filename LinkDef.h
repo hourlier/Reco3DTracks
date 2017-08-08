@@ -9,8 +9,8 @@
 #pragma link off all classes;
 #pragma link off all functions;
 
-#pragma link C++ namespace larlitecv;
-#pragma link C++ std::vector<std::vector<larcv::EventImage2D> >+;
-#pragma link C++ namespace Reco3D+;
+#pragma link C++ class larlite::AStarTracker+;
+#pragma link C++ class larlite::AStarTrackerDiagnostic+;
 //ADD_NEW_CLASS ... do not change this line
 #endif
+
