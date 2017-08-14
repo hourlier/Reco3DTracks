@@ -27,8 +27,9 @@
 #include "DataFormat/wire.h"
 #include "TH1D.h"
 #include "TH2D.h"
+#include "TSpline.h"
 
-#include "LArCV/core/DataFormat/ChStatus.h"
+//#include "LArCV/core/DataFormat/ChStatus.h"
 //#include "larcv/app/LArOpenCVHandle/LArbysUtils.h"
 #include "ThruMu/AStar3DAlgo.h"
 #include "ThruMu/AStar3DAlgoProton.h"
@@ -61,12 +62,12 @@ namespace larlitecv {
         }
 
         /// Default destructor
-        virtual ~AStarTracker(){}
+        ~AStarTracker(){}
 
         /** IMPLEMENT in AStarTracker.cc!
          Initialization method to be called before the analysis event loop.
          */
-        virtual bool initialize();
+        bool initialize();
 
         /** IMPLEMENT in AStarTracker.cc!
          Analyze a data event-by-event
@@ -76,7 +77,7 @@ namespace larlitecv {
         /** IMPLEMENT in AStarTracker.cc!
          Finalize method to be called after all events processed.
          */
-        virtual bool finalize();
+        bool finalize();
 
         void set_producer(std::string track_producer,std::string chstatus_producer){
             _track_producer = track_producer;
@@ -94,21 +95,25 @@ namespace larlitecv {
         void SetCompressionFactors(int compress_w, int compress_t){_compressionFactor_w = compress_w; _compressionFactor_t = compress_t;}
         void SetImages(std::vector<larcv::Image2D> images){hit_image_v = images;}
         void ReadProtonTrackFile();
+        void ReadSplineFile();
         void SetTrackInfo(int run, int subrun, int event, int track){_run = run; _subrun = subrun; _event = event; _track = track;}
 
         void tellMe(std::string s, int verboseMin);
-        //void CreateDataImage(std::vector<larlite::wire> wire_v);
+        void CreateDataImage(std::vector<larlite::wire> wire_v);
         void SetTimeAndWireBounds();
+        void SetTimeAndWireBoundsProtonsErez();
         void SetTimeAndWireBounds(TVector3 pointStart, TVector3 pointEnd);
         void SetTimeAndWireBounds(std::vector<TVector3> points);
         void SetTimeAndWireBounds(std::vector<TVector3> points, std::vector<larcv::ImageMeta> meta);
         void SetEndPoints(TVector3 vertex, TVector3 endpoint){start_pt = vertex; end_pt = endpoint;}
         void DrawTrack();
+        void  RegularizeTrack();
         void DrawROI();
         void TellMeRecoedPath();
         void Make3DpointList();
         void ComputeLength();
         void ComputedQdX();
+        void Reconstruct();
 
         bool CheckEndPointsInVolume(TVector3 point);
         bool IsGoodTrack();
@@ -120,17 +125,18 @@ namespace larlitecv {
         double EvalMinDist(TVector3 point);
         double EvalMinDist(TVector3 point, std::vector< std::pair<int,int> > endPix);
         double GetLength(){return _Length3D;}
+        double GetEnergy(std::string partType, double Length);
+        double GetTotalDepositedCharge();
         double X2Tick(double x, size_t plane) const;   // X[cm] to TPC tick (waveform index) conversion
         double Tick2X(double tick, size_t plane)const; // TPC tick (waveform index) to X[cm] conversion
 
         TVector3        CheckEndPoints(TVector3 point);
         TVector3        CheckEndPoints(TVector3 point,std::vector< std::pair<int,int> > endPix);
 
-        std::vector<TVector3>   Reconstruct();
+        //std::vector<TVector3>   Reconstruct();
         std::vector<TVector3>   CorrectSCE(std::vector<TVector3> thisTrack);
         std::vector<TVector3>   GetOpenSet(TVector3 newPoint, double dR);
         std::vector<TVector3>   GetTrack(){return _3DTrack;}
-        std::vector<TVector3>   RegularizeTrack(std::vector<TVector3> list);
         
         std::vector<std::vector<int> > _SelectableTracks;
         std::vector< std::vector<double> > GetdQdx(){return _dQdx;}
@@ -139,6 +145,11 @@ namespace larlitecv {
         std::vector<std::pair<double,double> > GetTimeBounds(){return time_bounds;}
         std::vector<std::pair<double,double> > GetWireBounds(){return wire_bounds;}
         std::vector<std::pair<int, int> >      GetWireTimeProjection(TVector3 point);
+
+        TSpline3* GetProtonRange2T(){return sProtonRange2T;}
+        TSpline3* GetMuonRange2T(){return sMuonRange2T;}
+        TSpline3* GetProtonT2dEdx(){return sProtonT2dEdx;}
+        TSpline3* GetMuonT2dEdx(){return sMuonT2dEdx;}
 
 
     protected:
@@ -191,6 +202,11 @@ namespace larlitecv {
 
         std::vector<std::pair<double,double> > time_bounds;
         std::vector<std::pair<double,double> > wire_bounds;
+
+        TSpline3 *sMuonRange2T;
+        TSpline3 *sMuonT2dEdx;
+        TSpline3 *sProtonRange2T;
+        TSpline3 *sProtonT2dEdx;
 
         TCanvas *c2;
     };

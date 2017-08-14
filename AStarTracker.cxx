@@ -18,7 +18,7 @@
 #include "TF1.h"
 #include "TVector3.h"
 
-#include "LArCV/core/DataFormat/ChStatus.h"
+//#include "LArCV/core/DataFormat/ChStatus.h"
 #include "LArOpenCVHandle/LArbysUtils.h"
 
 #include "ThruMu/AStar3DAlgo.h"
@@ -64,6 +64,81 @@ namespace larlitecv {
     //______________________________________________________
     void AStarTracker::tellMe(std::string s, int verboseMin = 0){
         if(_verbose >= verboseMin) std::cout << s << std::endl;
+    }
+    //______________________________________________________
+    void AStarTracker::SetTimeAndWireBoundsProtonsErez(){
+
+        int itrack = 0;
+        for(int tracknum = 0;tracknum<_SelectableTracks.size(); tracknum++){
+            if(_run    != _SelectableTracks[tracknum][0])continue;
+            if(_subrun != _SelectableTracks[tracknum][1])continue;
+            if(_event  != _SelectableTracks[tracknum][2])continue;
+            if(_track  != _SelectableTracks[tracknum][3])continue;
+            itrack = tracknum;
+        }
+
+        time_bounds.clear();
+        wire_bounds.clear();
+
+        std::pair<double, double> time_bound;
+        std::pair<double, double> wire_bound;
+        double timeOffset = 2400;
+        wire_bound.first  = _SelectableTracks[itrack][4];
+        time_bound.first  = _SelectableTracks[itrack][5]+timeOffset;
+        wire_bound.second = _SelectableTracks[itrack][6];
+        time_bound.second = _SelectableTracks[itrack][7]+timeOffset;
+        time_bounds.push_back(time_bound);
+        wire_bounds.push_back(wire_bound);
+
+        wire_bound.first  = _SelectableTracks[itrack][8];
+        time_bound.first  = _SelectableTracks[itrack][9]+timeOffset;
+        wire_bound.second = _SelectableTracks[itrack][10];
+        time_bound.second = _SelectableTracks[itrack][11]+timeOffset;
+        time_bounds.push_back(time_bound);
+        wire_bounds.push_back(wire_bound);
+
+        wire_bound.first  = _SelectableTracks[itrack][12];
+        time_bound.first  = _SelectableTracks[itrack][13]+timeOffset;
+        wire_bound.second = _SelectableTracks[itrack][14];
+        time_bound.second = _SelectableTracks[itrack][15]+timeOffset;
+        time_bounds.push_back(time_bound);
+        wire_bounds.push_back(wire_bound);
+
+        // equalize time ranges to intercept the same range on 3 views
+        for(size_t iPlane=0;iPlane<3;iPlane++){
+            for(size_t jPlane=0;jPlane<3;jPlane++){
+                if(time_bounds[jPlane].first  <= time_bounds[iPlane].first) {time_bounds[iPlane].first  = time_bounds[jPlane].first;}
+                if(time_bounds[jPlane].second >= time_bounds[iPlane].second){time_bounds[iPlane].second = time_bounds[jPlane].second;}
+            }
+        }
+
+        // Update the range with margin
+        double ImageMargin = 50.;
+        double fractionImageMargin = 0.25;
+        for(size_t iPlane=0;iPlane<3;iPlane++){
+            time_bounds[iPlane].first  -= std::max(ImageMargin,fractionImageMargin*(time_bounds[iPlane].second-time_bounds[iPlane].first));
+            time_bounds[iPlane].second += std::max(ImageMargin,fractionImageMargin*(time_bounds[iPlane].second-time_bounds[iPlane].first));
+            wire_bounds[iPlane].first  -= std::max(ImageMargin,fractionImageMargin*(wire_bounds[iPlane].second-wire_bounds[iPlane].first));
+            wire_bounds[iPlane].second += std::max(ImageMargin,fractionImageMargin*(wire_bounds[iPlane].second-wire_bounds[iPlane].first));
+
+            if(time_bounds[iPlane].first < 0) time_bounds[iPlane].first = 0;
+            if(wire_bounds[iPlane].first < 0) wire_bounds[iPlane].first = 0;
+
+            wire_bounds[iPlane].first  = (size_t)(wire_bounds[iPlane].first + 0.5);
+            wire_bounds[iPlane].second = (size_t)(wire_bounds[iPlane].second + 0.5);
+        }
+
+        // make sure the number of rows and cols are divisible by _compressionFactor
+        for(size_t iPlane=0;iPlane<3;iPlane++){
+            while(!( (size_t)(time_bounds[iPlane].second - time_bounds[iPlane].first)%_compressionFactor_t == 0)){time_bounds[iPlane].second++;}
+            tellMe(Form("%zu rows for %d compression factor",(size_t)(time_bounds[iPlane].second - time_bounds[iPlane].first),_compressionFactor_t),1);
+        }
+        for(int iPlane = 0;iPlane<3;iPlane++){
+
+            while(!( (size_t)(wire_bounds[iPlane].second - wire_bounds[iPlane].first)%_compressionFactor_w == 0)){wire_bounds[iPlane].second++;}
+            tellMe(Form("%zu cols for %d compression factor",(size_t)(wire_bounds[iPlane].second - wire_bounds[iPlane].first),_compressionFactor_w),1);
+        }
+
     }
     //______________________________________________________
     void AStarTracker::SetTimeAndWireBounds(){
@@ -405,6 +480,7 @@ namespace larlitecv {
     }
     //______________________________________________________
     bool AStarTracker::initialize() {
+        ReadSplineFile();
         ReadProtonTrackFile();
         _eventTreated = 0;
         _eventSuccess = 0;
@@ -420,7 +496,7 @@ namespace larlitecv {
         return true;
     }
     //______________________________________________________
-    std::vector<TVector3> AStarTracker::Reconstruct(){
+    void AStarTracker::Reconstruct(){
         _eventTreated++;
         tellMe("creating ch status and tag image",1);
         chstatus_image_v.clear();
@@ -492,28 +568,12 @@ namespace larlitecv {
         if(goal_reached == 1){
             _eventSuccess++;
         }
-        //else(std::cin.get());
 
         //_______________________________________________
         // Make track out of 3D nodes
         //-----------------------------------------------
         tellMe("making newTrack",1);
         Make3DpointList();
-
-        //_______________________________________________
-        // Compute dQdx for newTrack
-        //-----------------------------------------------
-        //tellMe("calling ComputedQdX()",1);
-        //newTrack = ComputedQdX(newTrack,hit_image_v,chstatus_image_v);
-
-        //-----------------------------------------------
-        // Draw dQdX profile
-        //-----------------------------------------------
-        //if(_DrawOutputs){
-        //    tellMe("calling DrawdQdX",1);
-        //    DrawdQdX(newTrack);
-        //}
-        return _3DTrack;
     }
     //______________________________________________________
     bool AStarTracker::finalize() {
@@ -735,7 +795,6 @@ namespace larlitecv {
             list3D.push_back(node);
         }
         _3DTrack = list3D;
-        ComputeLength();
     }
     //______________________________________________________
     void AStarTracker::ComputedQdX(){
@@ -797,10 +856,10 @@ namespace larlitecv {
                             if(theta1 >= theta0){bestCandidate=false;}
                         }//jNode
                         if(!bestCandidate)continue;
-                        double nodeDirX =  _3DTrack[iNode+1].X()-_3DTrack[iNode].X();
-                        double nodeDirY =  _3DTrack[iNode+1].Y()-_3DTrack[iNode].Y();
-                        double nodeDirZ =  _3DTrack[iNode+1].Z()-_3DTrack[iNode].Z();
-                        double norm = sqrt(nodeDirX*nodeDirX+nodeDirY*nodeDirY+nodeDirZ*nodeDirZ);
+                        //double nodeDirX =  _3DTrack[iNode+1].X()-_3DTrack[iNode].X();
+                        //double nodeDirY =  _3DTrack[iNode+1].Y()-_3DTrack[iNode].Y();
+                        //double nodeDirZ =  _3DTrack[iNode+1].Z()-_3DTrack[iNode].Z();
+                        //double norm = sqrt(nodeDirX*nodeDirX+nodeDirY*nodeDirY+nodeDirZ*nodeDirZ);
                         localdQdx+=hit_image_v[iPlane].pixel(irow,icol)/*/norm*/;
                         NpxLocdQdX++;
 
@@ -814,7 +873,7 @@ namespace larlitecv {
 
     }
     //______________________________________________________
-    /*void AStarTracker::CreateDataImage(std::vector<larlite::wire> wire_v){
+    void AStarTracker::CreateDataImage(std::vector<larlite::wire> wire_v){
         tellMe("Entering CreateImages(wire)",1);
         hit_image_v.clear();
         //hit_image_v.reserve(3);
@@ -858,12 +917,12 @@ namespace larlitecv {
                 if(detWire > wire_bound.first && detWire < wire_bound.second){
                     for (auto & iROI : wire.SignalROI().get_ranges()) {
                         int FirstTick = iROI.begin_index();
-                        int time_tick = FirstTick;
+                        int time_tick = FirstTick+2400;
                         for (float ADC : iROI) {
                             if ( time_tick > time_bound.first && time_tick < time_bound.second ) {
-                                row = (size_t)(time_bound.second - time_tick + 0.5);
+                                row = hit_meta.rows()-(size_t)(time_bound.second - time_tick + 0.5)-1;
                                 col = (size_t)(detWire - wire_bound.first + 0.5);
-                                if(ADC >= _ADCthreshold){image_data[hit_meta.rows() * col + row] = ADC;}
+                                if(ADC >= _ADCthreshold){image_data[hit_meta.rows() * col + row] = ADC;}// inverts time axis to go with LArCV convention
                             }
                             time_tick++;
                         } // ADC
@@ -884,11 +943,11 @@ namespace larlitecv {
             }
             hit_image_v.push_back(hit_image);
         }
-    }*/
+    }
     //______________________________________________________
     void AStarTracker::DrawTrack(){
         TH2D *hImage[3];
-        TH2D *hTrack[3];
+        //TH2D *hTrack[3];
         //TH2D *hIntegral[3];
         TGraph *gTrack[3];
         TGraph *gStartNend[3];
@@ -940,18 +999,21 @@ namespace larlitecv {
                 gTrack[iPlane]->SetPoint(iNode,x_pixel*hit_image_v[iPlane].meta().pixel_width()+hit_image_v[iPlane].meta().tl().x, y_pixel*hit_image_v[iPlane].meta().pixel_height()+hit_image_v[iPlane].meta().br().y);
             }*/
 
-            hTrack[iPlane] = new TH2D(Form("hTrack_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),
+            /*hTrack[iPlane] = new TH2D(Form("hTrack_%d_%d_%d_%d_%zu",_run,_subrun,_event,_track,iPlane),
                                       Form("hTrack_%d_%d_%d_%d_%zu;wire;time",_run,_subrun,_event,_track,iPlane),
                                       hit_image_v[iPlane].meta().cols(),
                                       hit_image_v[iPlane].meta().tl().x,
                                       hit_image_v[iPlane].meta().tl().x+hit_image_v[iPlane].meta().width(),
                                       hit_image_v[iPlane].meta().rows(),
                                       hit_image_v[iPlane].meta().br().y,
-                                      hit_image_v[iPlane].meta().br().y+hit_image_v[iPlane].meta().height());
+                                      hit_image_v[iPlane].meta().br().y+hit_image_v[iPlane].meta().height());*/
 
-            for(size_t iNode = 0;iNode<RecoedPath.size();iNode++){
-                gTrack[iPlane]->SetPoint(iNode,hit_image_v[iPlane].meta().tl().x+(RecoedPath[iNode].cols[iPlane]+0.5)*hit_image_v[iPlane].meta().pixel_width(),hit_image_v[iPlane].meta().br().y+(RecoedPath[iNode].row+0.5)*hit_image_v[iPlane].meta().pixel_height());
-                hTrack[iPlane]->SetBinContent(RecoedPath[iNode].cols[iPlane]+1,RecoedPath[iNode].row+1,1);
+            for(size_t iNode = 0;iNode<_3DTrack.size();iNode++){
+                Project3D(hit_image_v[iPlane].meta(),_3DTrack[iNode].X(),_3DTrack[iNode].Y(),_3DTrack[iNode].Z(),0,iPlane,x_pixel,y_pixel); // y_pixel is time
+
+                //gTrack[iPlane]->SetPoint(iNode,hit_image_v[iPlane].meta().tl().x+(RecoedPath[iNode].cols[iPlane]+0.5)*hit_image_v[iPlane].meta().pixel_width(),hit_image_v[iPlane].meta().br().y+(RecoedPath[iNode].row+0.5)*hit_image_v[iPlane].meta().pixel_height());
+                gTrack[iPlane]->SetPoint(iNode,x_pixel*hit_image_v[iPlane].meta().pixel_width()+hit_image_v[iPlane].meta().tl().x, y_pixel*hit_image_v[iPlane].meta().pixel_height()+hit_image_v[iPlane].meta().br().y);
+                //hTrack[iPlane]->SetBinContent(RecoedPath[iNode].cols[iPlane]+1,RecoedPath[iNode].row+1,1);
             }
         }
 
@@ -1039,7 +1101,7 @@ namespace larlitecv {
             c->cd(iPlane+1);
             //hIntegral[iPlane]->Draw();
             hImage[iPlane]->Draw("colz");
-            hTrack[iPlane]->Draw("same colz");
+            //hTrack[iPlane]->Draw("same colz");
             gTrack[iPlane]->SetLineColor(2);
             gTrack[iPlane]->Draw("same LP");
             gStartNend[iPlane]->SetMarkerStyle(20);
@@ -1049,12 +1111,12 @@ namespace larlitecv {
         c->SaveAs(Form("%s.pdf",c->GetName()));
         for(int iPlane = 0;iPlane<3;iPlane++){
             hImage[iPlane]->Delete();
-            hTrack[iPlane]->Delete();
+            //hTrack[iPlane]->Delete();
             //hIntegral[iPlane]->Delete();
             gTrack[iPlane]->Delete();
             gStartNend[iPlane]->Delete();
         }
-        tellMe("histogram and gStartNend deleted",0);
+        tellMe("histogram and gStartNend deleted",2);
     }
     //______________________________________________________
     void AStarTracker::DrawROI(){
@@ -1079,21 +1141,24 @@ namespace larlitecv {
 
             gStartNend[iPlane] = new TGraph();
             double x_pixel_st, y_pixel_st,x_pixel_end, y_pixel_end;
+            double Xstart,Ystart,Xend,Yend;
+
             Project3D(hit_image_v[iPlane].meta(),
                       start_pt.X(),start_pt.Y(),start_pt.Z(),
                       0,iPlane,x_pixel_st,y_pixel_st);
 
-            gStartNend[iPlane]->SetPoint(0,
-                                         x_pixel_st*hit_image_v[iPlane].meta().pixel_width() +hit_image_v[iPlane].meta().tl().x,
-                                         y_pixel_st*hit_image_v[iPlane].meta().pixel_height()+hit_image_v[iPlane].meta().br().y);
+            Xstart = x_pixel_st*hit_image_v[iPlane].meta().pixel_width() +hit_image_v[iPlane].meta().tl().x;
+            Ystart = y_pixel_st*hit_image_v[iPlane].meta().pixel_height()+hit_image_v[iPlane].meta().br().y;
+            gStartNend[iPlane]->SetPoint(0,Xstart,Ystart);
 
             Project3D(hit_image_v[iPlane].meta(),
                       end_pt.X(),end_pt.Y(),end_pt.Z(),
                       0,iPlane,x_pixel_end,y_pixel_end);
 
-            gStartNend[iPlane]->SetPoint(1,
-                                         x_pixel_end*hit_image_v[iPlane].meta().pixel_width() +hit_image_v[iPlane].meta().tl().x,
-                                         y_pixel_end*hit_image_v[iPlane].meta().pixel_height()+hit_image_v[iPlane].meta().br().y);
+            Xend = x_pixel_end*hit_image_v[iPlane].meta().pixel_width() +hit_image_v[iPlane].meta().tl().x;
+            Yend = y_pixel_end*hit_image_v[iPlane].meta().pixel_height()+hit_image_v[iPlane].meta().br().y;
+            gStartNend[iPlane]->SetPoint(1,Xend,Yend);
+
 
         }
 
@@ -1102,7 +1167,7 @@ namespace larlitecv {
         for(int iPlane=0;iPlane<3;iPlane++){
             c->cd(iPlane+1);
             hImage[iPlane]->Draw("colz");
-            gStartNend[iPlane]->SetMarkerStyle(20);
+            //gStartNend[iPlane]->SetMarkerStyle(4);
             //gStartNend[iPlane]->SetMarkerSize(0.25);
             gStartNend[iPlane]->Draw("same P");
         }
@@ -1127,62 +1192,76 @@ namespace larlitecv {
         return projection;
     }
     //______________________________________________________
+    void AStarTracker::ReadSplineFile(){
+        TFile *fSplines = TFile::Open("/Users/hourlier/Documents/PostDocMIT/Research/MicroBooNE/dllee_unified/larlitecv/app/Reco3DTracks/Proton_Muon_Range_dEdx_LAr_TSplines.root","READ");
+        sMuonRange2T   = (TSpline3*)fSplines->Get("sMuonRange2T");
+        sMuonT2dEdx    = (TSpline3*)fSplines->Get("sMuonT2dEdx");
+        sProtonRange2T = (TSpline3*)fSplines->Get("sProtonRange2T");
+        sProtonT2dEdx  = (TSpline3*)fSplines->Get("sProtonT2dEdx");
+        fSplines->Close();
+    }
+    //______________________________________________________
+    double AStarTracker::GetEnergy(std::string partType, double Length = -1){
+        if(partType == "proton"){
+            if(Length == -1){return sProtonRange2T->Eval(_Length3D);}
+            return sProtonRange2T->Eval(Length);
+        }
+        else if(partType == "muon"){
+            if(Length == -1){return sMuonRange2T->Eval(_Length3D);}
+            return sMuonRange2T->Eval(Length);
+        }
+        else{tellMe("ERROR, must be proton or muon",0); return -1;}
+    }
+    //______________________________________________________
+    double AStarTracker::GetTotalDepositedCharge(){
+        if(_3DTrack.size() == 0){tellMe("ERROR, run the 3D reconstruction first",0);return -1;}
+        if(_dQdx.size() == 0){tellMe("ERROR, run the dqdx reco first",0);return -1;}
+        double Qtot = 0;
+        for(int iNode = 0;iNode<_dQdx.size();iNode++){
+            double dqdx = 0;
+            int Nplanes = 0;
+            for(int iPlane = 0;iPlane<3;iPlane++){
+                dqdx+=_dQdx[iNode][iPlane];
+                if(_dQdx[iNode][iPlane] != 0)Nplanes++;
+            }
+            if(Nplanes!=0)dqdx*=3./Nplanes;
+            Qtot+=dqdx;
+        }
+        return Qtot;
+    }
+    //______________________________________________________
     bool IsInSegment(TVector3 A, TVector3 B, TVector3 C){
         if((C-A).Dot(B-A)/(B-A).Mag() > 0 && (C-A).Dot(B-A)/(B-A).Mag() < 1) return true;
         else return false;
     }
     //______________________________________________________
-    std::vector<TVector3> AStarTracker::RegularizeTrack(std::vector<TVector3> list){
+    void AStarTracker::RegularizeTrack(){
         std::vector<TVector3> newPoints;
-        std::vector<TVector3> futurePoints;
-        TVector3 candidate;
-        newPoints.push_back(list.front());
-        newPoints.push_back(list.back());
-        double authorizedDev = 0.5;
-        bool addedPoint = true;
+        int oldNumPoints = _3DTrack.size();
+        bool removedPoint = true;
         int iteration = 0;
-        while(addedPoint && iteration < 1000){
-            std::cout << iteration << std::endl;
+        double distMax = 0.5;
+        double distLastPoint = 1;
+        while(removedPoint == true && iteration<100){
+            removedPoint =false;
             iteration++;
-            addedPoint = false;
-
-            for(int j = 0;j<newPoints.size()-1;j++){
-
-                TVector3 A = newPoints[j];
-                TVector3 B = newPoints[j+1];
-                double maxDist2line = -1;
-
-                for(int i = 0;i<list.size();i++){
-                    TVector3 C = list[i];
-                    if( IsInSegment(A,B,C) ){ // point C between points A and B => evaluate distance
-                        double dist = GetDist2line(A,B,C);
-                        if(dist > maxDist2line){
-                            maxDist2line = dist;
-                            candidate = C;
-                        }
-                    }
+            std::cout << "iteration #" << iteration << std::endl;
+            newPoints.clear();
+            newPoints.push_back(_3DTrack[0]);
+            for(int iNode = 1;iNode<_3DTrack.size()-1;iNode++){
+                double dist2line = GetDist2line(newPoints[newPoints.size()-1],_3DTrack[iNode+1],_3DTrack[iNode]);
+                double dist2point = (_3DTrack[iNode]-newPoints[newPoints.size()-1]).Mag();
+                if(dist2line < distMax && dist2point < distLastPoint){
+                    //std::cout << "removing point, iteration #" << iteration << std::endl;
+                    removedPoint = true;
+                    continue;
                 }
-                if(maxDist2line > authorizedDev){
-                    std::cout << GetDist2line(A,B,candidate) << std::endl;
-                    futurePoints.push_back(candidate);
-                    addedPoint = true;
-                }
+                else newPoints.push_back(_3DTrack[iNode]);
             }
-            // make new "newPoints" by adding "future Points"
-            for(int i = 0;i<futurePoints.size();i++){
-                bool added = false;
-                for(int j = 0;j<newPoints.size()-1;j++){
-                    if(added == false){
-                        if(IsInSegment(newPoints[j],newPoints[j+1],futurePoints[i])){
-                            newPoints.insert(newPoints.begin()+j+1,futurePoints[i]);
-                            added = true;
-                        }
-                    }
-                }
-            }
-
-        }// end while loop
-        return newPoints;
+            newPoints.push_back(_3DTrack[_3DTrack.size()-1]);
+            _3DTrack = newPoints;
+        }
+        std::cout << "old number of points : " << oldNumPoints << " and new one : " << _3DTrack.size() << std::endl;
     }
     //______________________________________________________
     double AStarTracker::GetDist2line(TVector3 A, TVector3 B, TVector3 C){
@@ -1258,7 +1337,6 @@ namespace larlitecv {
             if(_event  != trackinfo[2])continue;
             if(_track  != trackinfo[3])continue;
             return true;
-            //if(_run == trackinfo[0] && _subrun == trackinfo[1] && _event == trackinfo[2] && _track == trackinfo[3]){return true;}
         }
         return false;
     }
